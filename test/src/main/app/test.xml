@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <db:mysql-config name="MySQL_Configuration" host="localhost" port="3306" user="root" password="root" database="test" doc:name="MySQL Configuration"/>
+    <http:request-config name="HTTP_Request_Configuration" host="loacalhost" port="8081" doc:name="HTTP Request Configuration"/>
+    <flow name="testFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/plm" doc:name="HTTP"/>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+        <set-payload value="#[payload.split('~')]" doc:name="splits_payload"/>
+        <set-session-variable variableName="product_id_plm" value="#[payload[1]]" doc:name="product_id_plm"/>
+        <set-session-variable variableName="uuid" value="#[UUID.randomUUID().toString().replace('-', '').substring(0,5)]" doc:name="uuid"/>
+        <set-session-variable variableName="date_created" value="#[function:date]" doc:name="date_created"/>
+        <set-session-variable variableName="date_inactive" value="#[function:date]" doc:name="date_inactive"/>
+        <enricher target="#[variable:ignore]" doc:name="Message Enricher">
+            <flow-ref name="PLM_request_storing_in_msgbd" doc:name="PLM_request_storing_in_msgbd"/>
+        </enricher>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	Operation: payload[0],
+
+productNumber: payload[1],
+
+specStatus: payload[2],
+
+effort1: payload[3],
+
+dptNumber: payload[4],
+
+MainFrame_Item_Number: payload[5],
+
+MainFrame_Style_Number: payload[6],
+
+productType: payload[7],
+
+shortDescription: payload[8],
+
+SourceCode: payload[9],
+
+productManager: payload[10],
+
+cntrlBuyer: payload[11],
+
+sizeCategory: payload[12],
+
+unitOfSale: payload[13],
+
+packageCode: payload[14],
+
+marketCategory: payload[15],
+
+vendor: payload[16],
+
+specialFeatureCode: payload[17],
+
+sourcingManager: payload[18],
+
+careWashText: payload[19],
+
+fabric: payload[20],
+
+seasonType: payload[21],
+
+Year: payload[22],
+
+modType: payload[23],
+
+newRepeat: payload[24],
+
+brandLabel: payload[25],
+
+neverOut: payload[26],
+
+perennialSeasonal: payload[27],
+
+fashionBasic: payload[28],
+
+moduleQuantity: payload[29],
+
+specialHandllingCode: payload[30],
+
+vendor2: payload[31],
+
+sourceCode2: payload[32],
+
+fabric2: payload[33],
+
+modType2: payload[34],
+
+vendor3: payload[35],
+
+sourceCode3: payload[36],
+
+fabric3: payload[37],
+
+modType3: payload[38],
+
+fitPlusSilhouette: payload[39],
+
+longdescription: payload[40],
+
+country1: payload[41],
+
+country2: payload[42],
+
+country3: payload[43],
+
+calProp65WarningReqrd: payload[44],
+
+materialCategory: payload[45],
+
+genderMarket: payload[46],
+
+constructionSummary: payload[47],
+
+fitPlusLength: payload[48],
+
+ProductTitle: payload[49],
+
+usaImport: payload[50],
+
+usaImport2: payload[51],
+
+usaImport3: payload[52],
+
+callOut: payload[53],
+
+replenishmentTrigger: payload[54],
+
+neckline: payload[55],
+
+collar: payload[56],
+
+waist: payload[57],
+
+sleeveShape: payload[58],
+
+hem: payload[59],
+
+details: payload[60],
+
+occasion: payload[61],
+
+designNumber: payload[62],
+
+setMaster: payload[63],
+
+brandName: payload[64],
+
+privateLabel: payload[65],
+
+HandOver: payload[66],
+
+dropShipAltDept: payload[67],
+
+taxCode: payload[68]
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="#[payload]" level="INFO" doc:name="logger"/>
+        <http:request config-ref="HTTP_Request_Configuration" path="/ami" method="POST" doc:name="HTTP"/>
+    </flow>
+    <sub-flow name="PLM_request_storing_in_msgbd">
+        <logger message="inserting into msgdb" level="INFO" doc:name="Logger"/>
+        <db:insert config-ref="MySQL_Configuration" doc:name="Database">
+            <db:parameterized-query><![CDATA[insert into product_ids(product_id_plm,uuid,isActive,date_created,date_inactive)
+values 
+(#[sessionVars.product_id_plm],
+#[sessionVars.uuid],
+0,
+#[sessionVars.date_created],
+#[sessionVars.date_inactive])
+on duplicate key update
+uuid = values(uuid),
+date_created= values(date_created),
+date_inactive = values(date_inactive)]]></db:parameterized-query>
+        </db:insert>
+        <logger message="inserted into masgbd successfully" level="INFO" doc:name="Logger"/>
+    </sub-flow>
+    <flow name="testFlow1">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/ami" doc:name="HTTP"/>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+        <set-payload value="#[payload.split('~')]" doc:name="Set Payload"/>
+        <set-session-variable variableName="product_id_main" value="#[payload[1]]" doc:name="product_id_main"/>
+        <enricher target="#[variable:ignore]" doc:name="Message Enricher">
+            <flow-ref name="testSub_Flow" doc:name="testSub_Flow"/>
+        </enricher>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	Operation: payload[0],
+
+productNumber: payload[1],
+
+specStatus: payload[2],
+
+effort1: payload[3],
+
+dptNumber: payload[4],
+
+MainFrame_Item_Number: payload[5],
+
+MainFrame_Style_Number: payload[6],
+
+productType: payload[7],
+
+shortDescription: payload[8],
+
+SourceCode: payload[9],
+
+productManager: payload[10],
+
+cntrlBuyer: payload[11],
+
+sizeCategory: payload[12],
+
+unitOfSale: payload[13],
+
+packageCode: payload[14],
+
+marketCategory: payload[15],
+
+vendor: payload[16],
+
+specialFeatureCode: payload[17],
+
+sourcingManager: payload[18],
+
+careWashText: payload[19],
+
+fabric: payload[20],
+
+seasonType: payload[21],
+
+Year: payload[22],
+
+modType: payload[23],
+
+newRepeat: payload[24],
+
+brandLabel: payload[25],
+
+neverOut: payload[26],
+
+perennialSeasonal: payload[27],
+
+fashionBasic: payload[28],
+
+moduleQuantity: payload[29],
+
+specialHandllingCode: payload[30],
+
+vendor2: payload[31],
+
+sourceCode2: payload[32],
+
+fabric2: payload[33],
+
+modType2: payload[34],
+
+vendor3: payload[35],
+
+sourceCode3: payload[36],
+
+fabric3: payload[37],
+
+modType3: payload[38],
+
+fitPlusSilhouette: payload[39],
+
+longdescription: payload[40],
+
+country1: payload[41],
+
+country2: payload[42],
+
+country3: payload[43],
+
+calProp65WarningReqrd: payload[44],
+
+materialCategory: payload[45],
+
+genderMarket: payload[46],
+
+constructionSummary: payload[47],
+
+fitPlusLength: payload[48],
+
+ProductTitle: payload[49],
+
+usaImport: payload[50],
+
+usaImport2: payload[51],
+
+usaImport3: payload[52],
+
+callOut: payload[53],
+
+replenishmentTrigger: payload[54],
+
+neckline: payload[55],
+
+collar: payload[56],
+
+waist: payload[57],
+
+sleeveShape: payload[58],
+
+hem: payload[59],
+
+details: payload[60],
+
+occasion: payload[61],
+
+designNumber: payload[62],
+
+setMaster: payload[63],
+
+brandName: payload[64],
+
+privateLabel: payload[65],
+
+HandOver: payload[66],
+
+dropShipAltDept: payload[67],
+
+taxCode: payload[68],
+
+ErrorMessage: payload[69]
+
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+    <sub-flow name="testSub_Flow">
+        <logger message="updated into products_id" level="INFO" doc:name="Logger"/>
+        <db:update config-ref="MySQL_Configuration" doc:name="Database">
+            <db:parameterized-query><![CDATA[update products_ids
+SET product_id_main = #[sessionVars.product_id_main]
+where product_id_plm = #[sessionVars.product_id_plm]]]></db:parameterized-query>
+        </db:update>
+        <logger message="update successful" level="INFO" doc:name="Logger"/>
+    </sub-flow>
+</mule>
